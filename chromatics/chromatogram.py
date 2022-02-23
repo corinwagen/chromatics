@@ -26,7 +26,6 @@ class Chromatogram():
         peaks (list of chromatics.Peak): the component peaks to be fit to the model
         baseline_models (list of chromatics.BaselinePeak): the baseline model to be fit to the model
         freeze_baseline (Bool): whether to optimize baseline or not.
-        frozen (Bool): whether or not everything but amplitudes is considered "frozen" for multichromatogram optimization.
     """
 
     def __init__(self, X, Y, Y_labels=None, peaks=2, scale_factor=1, baseline_corrections=True, model=chromatics.FrankensteinPeak, freeze_baseline=False, frozen=False, **kwargs):
@@ -96,6 +95,7 @@ class Chromatogram():
             return f"chromatics.chromatogram.{self.__class__.__name__}(X={repr(self.X)}, Y={repr(self.Y)}, Y_labels={repr(self.Y_labels)}, peaks={[repr(p) for p in self.peaks]}, baseline_corrections={[repr(b) for b in self.baseline_corrections]}, scale_factor={self.scale_factor}, freeze_baseline={self.freeze_baseline}, frozen={self.frozen})"
 
     def save(self, filename, label=None):
+        """ Save full Chromatogram object to a file."""
         save_obj = copy.deepcopy(self)
 
         if label is not None:
@@ -109,6 +109,7 @@ class Chromatogram():
 
     @classmethod
     def load(cls, filename):
+        """ Load full chromatogram object from a file. """
         from numpy import array # needed for eval() to work on numpy arrays. blame numpy, not me!
 
         assert os.path.exists(filename), f"can't load chromatogram from {filename} -- no file!"
@@ -149,6 +150,7 @@ class Chromatogram():
 
     def add_baseline(self, num=1, model=chromatics.ConstantBaseline):
         """
+        Add ``num`` baseline models to ``self.baseline``, populated with default parameters.
         """
         assert isinstance(num, int)
         if num == 0:
@@ -464,11 +466,12 @@ class Chromatogram():
         areas = [p.area() for p in self.peaks]
         return areas / np.sum(areas)
 
-    def unit_areas(self):
-        return [p.unit_area() for p in self.peaks]
-
     def ee(self):
-        """ peak 2 - peak 1 """
+        """
+        Returns the enantiomeric excess of the chromatogram, defined as A(peak #2) – A(peak #1).
+
+        Only defined for 2-peak chromatograms.
+        """
         areas = self.areas()
         if len(areas) == 2:
             if self.peaks[0].params["center"] < self.peaks[1].params["center"]:
@@ -479,6 +482,11 @@ class Chromatogram():
             return None
 
     def er(self):
+        """
+        Returns the enantiomeric ratio of the chromatogram, defined as A(peak #1)/A(total).
+
+        Only defined for 2-peak chromatograms.
+        """
         areas = self.areas()
         if len(areas) == 2:
             return areas[0]*100.0/(areas[0]+areas[1])
@@ -486,7 +494,12 @@ class Chromatogram():
             return None
 
     def R(self, threshold=0.5, peak_idxs=None):
-        # threshold of 0.5 is USP standard
+        """
+        Returns the chromatographic resolution of the chromatogram.
+        A threshold of 0.5 is the USP standard.
+
+        If the chromatogram has more than 2 peaks, the desired peaks can be specified with ``peak_idxs.``
+        """
 
         assert isinstance(threshold, float), "threshold must be float"
         assert 0 < threshold < 1, "threshold must be between 0 and 1"
@@ -509,11 +522,11 @@ class Chromatogram():
         try:
             return 2 * abs(peak1.params["center"] - peak2.params["center"]) / (peak1.width(threshold=threshold) + peak2.width(threshold=threshold))
         except Exception as e:
-#            raise ValueError(e)
             print(f"R calculation error - {e}")
             return None
 
     def total_area(self):
+        """ Returns the total area of all peaks. """
         return sum([p.area() for p in self.peaks]) * self.scale_factor
 
     @classmethod
@@ -580,8 +593,10 @@ class Chromatogram():
         """ Convenient alias to simplify importing from the OpenChrom .csv format. """
         return cls.new_from_csv(file, x_start=(1,1), y_start=(1,3), label_start=(0,3), transpose=True, encoding="utf8", **kwargs)
 
-    # compute fit metrics within window_size of the peaks
     def fit_metrics(self, label=None, window_size=0.2):
+        """
+        Compute common fit metrics (R**2 and mean squared error) within ``window_size`` of the peaks.
+        """
         centers = [p.params["center"] for p in self.peaks]
         max_X = np.max(self.X)
         time_window_min = max(0, min(centers) - window_size)
@@ -601,15 +616,21 @@ class Chromatogram():
         return metrics
 
     def scale_Y(self):
+        """
+        Scale all Y values down by dividing by the maxiumum Y value.
+        The original scale can be recovered by multiplying by ``self.scale_factor``.
+        """
         self.scale_factor = self.scale_factor * np.max(self.Y)
         self.Y = self.Y / self.scale_factor
 
     def fit_baseline(self, label, X_min, X_max):
         """
+        Fit the baseline correction on a specific region of the chromatogram.
+
         Args:
-            label (float):
-            X_min (int):
-            X_max (int):
+            label (float): which Y-value to use
+            X_min (int): minimum X value to consider
+            X_max (int): maxiumum X value to consider
         """
         Y = self.Y_from_label(label)
 
@@ -630,70 +651,15 @@ class Chromatogram():
         self.unpack_parameters(out.params)
         self.freeze_baseline = True
 
-    def freeze(self):
-        """
-        Store data for use in multi-chromatogram analysis.
-        """
-        if self.frozen:
-            return
-
-        areas = self.areas()
-        major_idx = 0
-        minor_idx = 1
-
-        if areas[0] < areas[1]:
-            major_idx = 1
-            minor_idx = 0
-
-        self.major_idx = major_idx
-        self.minor_idx = minor_idx
-
-        unit_areas = self.unit_areas()
-        major_minor_ratio = unit_areas[major_idx]/unit_areas[minor_idx]
-        self.major_minor_ratio = major_minor_ratio
-        self.frozen = True
-
-    def eval_frozen(self, label, major_area_percent, total_amplitude, major_idx=None):
-        """
-        Change peak amplitudes and return residuals. Peak shapes will remain unchanged.
-
-        Args:
-            label (str):
-            major_area_percent (float):
-            total_amplitude (float):
-            major_idx (int):
-        """
-        assert len(self.peaks) == 2, "multi-chromatogram fitting not supported for more than two peaks!"
-        self.freeze()
-        params = self.build_parameters(amplitude_only=True)
-
-        minor_idx = None
-        if major_idx is None:
-            major_idx, minor_idx = self.major_idx, self.minor_idx
-        elif major_idx == 1:
-            minor_idx = 0
-        elif major_idx == 0:
-            minor_idx = 1
-        else:
-            raise ValueError("``major_idx`` should be None, 0, or 1!")
-
-        params[f"p{major_idx}_amplitude"].set(value=total_amplitude * major_area_percent / self.major_minor_ratio)
-        params[f"p{minor_idx}_amplitude"].set(value=total_amplitude * (1 - major_area_percent))
-
-        self.unpack_parameters(params)
-
-        Y = self.Y_from_label(label)
-        model = self.build_model()
-        resid = Y - model.eval(params, x=self.X)
-        return resid * (Y != 0) # exclude zeros from fit - too messy with the cutoff
-
     def top_labels(self):
+        """ Return an ordered list of which Y-labels are most abundant. """
         avg_tic = np.mean(self.Y, axis=1)
         top_idx = np.argsort(avg_tic)
         top_labels = self.Y_labels[top_idx[::-1]]
         return top_labels
 
     def set_peak_labels(self, labels):
+        """ Assign labels to peaks. """
         assert isinstance(labels, (list, tuple)), "labels must be list of peak labels"
         assert len(labels) == len(self.peaks), "must be one for every peak"
         for l, p in zip(labels, self.peaks):
