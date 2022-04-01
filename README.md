@@ -11,4 +11,4 @@ For an example of how to use *chromatics*, see ``tutorial/tutorial.ipynb``.
 
 This library is released under a GPL 3.0 license: see ``LICENSE.txt`` for more details
 
-*Corin Wagen, Eugene Kwan, and Spencer McMinn, 2022*
+*Corin Wagen, Eugene Kwan, Spencer McMinn, and Eric Jacobsen, 2022*
