@@ -9,6 +9,8 @@ of parametric peak models.
 
 For an example of how to use *chromatics*, see ``tutorial/tutorial.ipynb``.
 
+Please cite as: Wagen, C. C. *chromatics* **2020**, www.github.com/corinwagen/chromatics.
+
 This library is released under a GPL 3.0 license: see ``LICENSE.txt`` for more details
 
 *Corin Wagen, Eugene Kwan, Spencer McMinn, and Eric Jacobsen, 2022*
