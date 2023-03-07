@@ -315,8 +315,8 @@ class Chromatogram():
 
                 # get sane defaults
                 peak.set_center(time)
-                peak.set_sigma(0.005)
-                peak.set_gamma(0)
+                #peak.set_sigma(0.005)
+                #peak.set_gamma(0)
 
                 try:
                     peak.set_height(np.mean(Y[idx-2:idx+2]))
@@ -434,15 +434,19 @@ class Chromatogram():
 
         colors = ["darkorange", "royalblue"]
         if color:
-            colors = [color, color]
+            colors = [color] * len(self.peaks)
         else:
             areas = self.areas()
             if len(areas) == 2:
                 if areas[0] < areas[1]:
                     colors = ["royalblue", "darkorange"]
 
+
+        baseline_params = self.build_parameters(baseline_only=True)
+        baseline_model = self.build_model(baseline_only=True)
+
         for idx, (peak, params, label) in enumerate(self.build_peaks()):
-            pred_Y = peak.eval(params, x=self.X)
+            pred_Y = peak.eval(params, x=self.X) + baseline_model.eval(baseline_params, x=self.X)
             ax.plot(self.X, pred_Y * self.scale_factor * scale, color=colors[idx])
             ax.fill_between(self.X, 0, pred_Y * self.scale_factor * scale, facecolor=colors[idx], alpha=alpha, label=label)
 
@@ -530,7 +534,7 @@ class Chromatogram():
         return sum([p.area() for p in self.peaks]) * self.scale_factor
 
     @classmethod
-    def new_from_csv(cls, file, x_start, y_start, label_start=None, encoding="utf16", max_len=None, transpose=False, **kwargs):
+    def new_from_csv(cls, file, x_start, y_start, label_start=None, encoding="utf16", max_len=None, transpose=False, convert_to_min=False, **kwargs):
         """
         Creates a new ``Chromatogram`` object from a ``.csv`` file. Assumption is that rows are masses and columns are times.
         If this is wrong, set ``transpose`` to ``True``.
@@ -543,6 +547,7 @@ class Chromatogram():
             encoding (str): text encoding (e.g. "utf8")
             max_len (int): max number of X and Y values (ignore after this many)
             transpose (bool): transpose rows and columns
+            convert_to_min (bool): divide X by 60
         """
 
         with open(file, encoding=encoding) as f:
@@ -551,9 +556,12 @@ class Chromatogram():
                 X = x_row.split(",")[x_start[1]:max_len]
                 X = np.array([float(re.sub(r'_min$', '', x)) for x in X])
 
+                if convert_to_min:
+                    X *= 1/60
+
                 if label_start:
                     assert y_start[0] == label_start[0], "labels should match up to rows"
-                    data = np.genfromtxt(file, delimiter=",", encoding=encoding, skip_header=y_start[0])
+                    data = np.genfromtxt(file, delimiter=",", encoding=encoding, skip_header=y_start[0], invalid_raise=False)
 
                     assert data.ndim == 2
                     Y = np.nan_to_num(data[0:, y_start[1]:max_len])
@@ -563,7 +571,7 @@ class Chromatogram():
                     assert len(Y) == len(labels), f"can't have labels and Y different lengths! ({len(labels)} and {len(Y[0])}, respectively)"
                     return cls(X, Y, Y_labels=labels, **kwargs)
                 else:
-                    data = np.genfromtxt(file, delimiter=",", encoding=encoding, skip_header=y_start[0])
+                    data = np.genfromtxt(file, delimiter=",", encoding=encoding, skip_header=y_start[0], invalid_raise=False)
                     if data.ndim == 2:
                         data = data[0]
                     Y = np.nan_to_num(data[y_start[1]:])
@@ -579,10 +587,13 @@ class Chromatogram():
                 assert x_start[0] == y_start[0], "labels should match up to rows"
                 assert label_start[1] == y_start[1], "labels should match up to rows"
 
-                data = np.genfromtxt(file, delimiter=",", encoding=encoding, skip_header=y_start[0])
+                data = np.genfromtxt(file, delimiter=",", encoding=encoding, skip_header=y_start[0], invalid_raise=False)
                 assert data.ndim == 2
                 Y = np.nan_to_num(data[0:, y_start[1]:max_len]).T
-                X = data[0:, x_start[0]]
+                X = data[0:, x_start[1]]
+
+                if convert_to_min:
+                    X *= 1/60
 
                 assert len(Y[0]) == len(X), f"can't have X and Y different lengths! ({len(X)} and {len(Y[1])}, respectively)"
                 assert len(Y) == len(labels), f"can't have labels and Y different lengths! ({len(labels)} and {len(Y[0])}, respectively)"

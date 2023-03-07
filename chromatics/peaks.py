@@ -39,8 +39,11 @@ class Peak():
         self.prefix = prefix
 
         assert isinstance(params, dict), "params must be dict"
-        assert "center" in params, "center must be in params"
-        assert "amplitude" in params, "amplitude must be in params"
+
+        if not isinstance(self, BaselinePeak):
+            assert "center" in params, "center must be in params"
+            assert "amplitude" in params, "amplitude must be in params"
+
         self.params = params
 
         assert isinstance(param_settings, dict), "param_settings must be dict"
@@ -267,6 +270,26 @@ class SkewedGaussianPeak(Peak):
 
         super().__init__(model=model, **kwargs)
 
+class ExponentialGaussianPeak(Peak):
+    def __init__(self, **kwargs):
+        model = models.ExponentialGaussianModel()
+
+        if "params" not in kwargs:
+            kwargs["params"] = {
+                "amplitude": 0.1,
+                "center": 0,
+                "sigma": 0.1,
+                "gamma": 10,
+            }
+
+        if "param_settings" not in kwargs:
+            kwargs["param_settings"] = {
+                "gamma": {"min": 0, "max": 100},
+                "amplitude": {"min": 0},
+            }
+
+
+        super().__init__(model=model, **kwargs)
 
 class ConstantBaseline(BaselinePeak):
     def __init__(self, **kwargs):
