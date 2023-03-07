@@ -25,6 +25,8 @@ Please cite as: Wagen, C. C. *chromatics* 2020, www.github.com/corinwagen/chroma
 
 ## License
 
+Please cite as: Wagen, C. C. *chromatics* **2020**, www.github.com/corinwagen/chromatics.
+
 This library is released under a GPL 3.0 license: see ``LICENSE.txt`` for more details
 
 *Corin Wagen, 2022*
